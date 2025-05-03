@@ -1,4 +1,5 @@
-def add_expenses_demonstration(expense_tracker):
+# демонстирирует добавление траты
+def add_expenses_demo(expense_tracker):
     while True:
         category_name = input("Введите категорию или 'продолжить' ").strip()
         if category_name.lower() == "продолжить" or category_name.lower() == "":
@@ -6,14 +7,7 @@ def add_expenses_demonstration(expense_tracker):
 
         category = expense_tracker.add_category(category_name)
 
-        while True:
-            expense_name = input("Введите наименование траты: ").strip()
-            try:
-                if len(expense_name) > 0:
-                    break
-                print("Пожалуйста, введите наименование траты")
-            except ValueError:
-                print("Пожалуйста, введите наименование траты")
+        expense_name = input("Введите наименование траты: ").strip()
 
         while True:
             try:
@@ -35,7 +29,7 @@ def add_expenses_demonstration(expense_tracker):
         print(f"Добавлено: {amount}р в категорию '{category_name}'")
 
 
-def view_largest_expenses_demonstration(expense_tracker):
+def view_largest_expenses_demo(expense_tracker):
     while True:
         category_name = input(
             "Введите категорию, чтобы посмотреть самую крупную трату, или введите 'продолжить' ").strip()
@@ -53,7 +47,7 @@ def view_largest_expenses_demonstration(expense_tracker):
                 print("Пожалуйста, введите корректную дату")
 
 
-def view_most_expensive_categories_demonstration(expense_tracker):
+def view_most_expensive_categories_demo(expense_tracker):
     while True:
         month = input(
             "Введите месяц в числовом формате, чтобы посмотреть, на какую из категорий пришлось больше всего трат, или введите 'завершить' ").strip()
