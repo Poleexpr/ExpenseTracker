@@ -14,3 +14,16 @@ extend-select = [
   "W",   # additional warnings like W292
 ]
 
+[tool.poetry]
+name = "expense-tracker"
+version = "0.1.0"
+package-mode = false
+
+[tool.poetry.dependencies]
+python = "^3.10"
+pymongo = "^4.6.0"       # для bson.json_util
+requests = "^2.31.0"      # для HTTP-запросов
+
+[tool.poetry.group.test.dependencies]
+pytest = "^8.4.0"         # для тестов
+mongomock = "^4.1.2"     # мок для MongoDB
