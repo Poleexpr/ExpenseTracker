@@ -1,4 +1,6 @@
 import json
+import logging
+
 # noinspection PyUnresolvedReferences
 from bson.json_util import dumps
 from http.server import BaseHTTPRequestHandler, HTTPServer
@@ -6,10 +8,30 @@ from urllib.parse import parse_qs, urlparse
 
 from expenses import ExpenseTracker
 
+# Инициализация логгера
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+    handlers=[
+        logging.StreamHandler(),
+        logging.FileHandler('server.log')
+    ]
+)
+logger = logging.getLogger('HTTP Server')
+
 # Инициализация объекта ExpenseTracker, который хранит и обрабатывает данные о тратах
 tracker = ExpenseTracker()
 
 class SimpleHTTPRequestHandler(BaseHTTPRequestHandler):
+
+    def log_message(self, format, *args):
+        """Переопределение стандартного вывода логов запросов"""
+        logger.info("%s - - [%s] %s" % (
+            self.address_string(),
+            self.log_date_time_string(),
+            format % args
+        ))
+
     """
     Класс обработчика HTTP-запросов, наследуется от BaseHTTPRequestHandler.
     Реализует методы do_GET и do_POST для обработки GET и POST запросов соответственно.
@@ -23,51 +45,81 @@ class SimpleHTTPRequestHandler(BaseHTTPRequestHandler):
         self.send_header('Content-type', 'application/json; charset=utf-8')
         self.end_headers()
 
+    def _send_json_response(self, data, code=200):
+        """Отправка JSON-ответа"""
+        self._set_headers(code)
+        self.wfile.write(json.dumps(data, ensure_ascii=False).encode('utf-8'))
+
+    def _handle_error(self, code, message):
+        """Обработчик ошибок с правильным Content-Type"""
+        self.send_response(code)
+        self.send_header('Content-type', 'application/json; charset=utf-8')
+        self.end_headers()
+        error_response = {
+            "error": self.responses[code][0],
+            "message": message
+        }
+        self.wfile.write(json.dumps(error_response).encode('utf-8'))
+
     def do_POST(self): # noqa: N802
         """
         Обработка POST-запросов.
         В проекте поддерживается путь /add_expense, который позволяет добавить новую трату.
         """
-        parsed_url = urlparse(self.path) # Выполняем парсинг пути
-        path = parsed_url.path # Получаем путь запроса
-        if path == "/add_expense":
-            # Получаем длину тела запроса из заголовков
-            content_length = int(self.headers.get('Content-Length', 0))
-            # Читаем тело запроса (байты), декодируем из utf-8 в строку
-            body = self.rfile.read(content_length).decode('utf-8')
-            # Парсим JSON из строки в словарь, если тело не пустое
-            data = json.loads(body) if body else {}
-            # Извлекаем необходимые параметры для добавления траты
-            name = data.get('name')
-            category = data.get('category')
-            amount = data.get('amount')
-            date = data.get('date')
+        try:
+            parsed_url = urlparse(self.path) # Выполняем парсинг пути
+            path = parsed_url.path # Получаем путь запроса
+            
+            if path == "/add_expense":
+                # Получаем длину тела запроса из заголовков
+                content_length = int(self.headers.get('Content-Length', 0))
+                # Читаем тело запроса (байты), декодируем из utf-8 в строку
+                body = self.rfile.read(content_length).decode('utf-8')
+                try:
+                    # Парсим JSON из строки в словарь, если тело не пустое
+                    data = json.loads(body) if body else {}
+                except json.JSONDecodeError:
+                    self._send_json_response({
+                        "error": "Bad Request", 
+                        "message": "Неверный формат JSON"
+                    }, 400)
+                    return
 
-            # Проверяем, что все поля заполнены - если нет, возвращаем 400 Bad Request
-            if not name or not category or not amount or not date:
-                self.send_response(400)
-                self.send_header('Content-type', 'application/json')
-                self.end_headers()
-                # Отправляем JSON-ответ с сообщением об ошибке
-                self.wfile.write(json.dumps({
-                    "error": "Bad Request",
-                    "message": "Недостаточно данных для добавления траты в базу данных!"
-                }).encode('utf-8'))
-                return
-            # Если все данные присутствуют, добавляем трату через tracker
-            msg = tracker.add_expense(name, category, amount, date)
-            # Устанавливаем стандартные заголовки с кодом 200 OK
-            self._set_headers()
-            # Отправляем сообщение об успешном добавлении
-            self.wfile.write(json.dumps({"message": msg}).encode('utf-8'))
-        else:
-            # Если POST-запрос на неизвестный путь, возвращаем 404 Not Found
-            self._set_headers(404)
-            self.wfile.write(json.dumps({
-                "error": "Not Found",
-                "message": f"На сервере не обнаружено запрашиваемого метода '{path}'."
-            }).encode('utf-8'))
+                # Записываем в дебаг лог
+                logger.debug(f"POST data received: {data}")
 
+                # Извлекаем необходимые параметры для добавления траты
+                name = data.get('name')
+                category = data.get('category')
+                amount = data.get('amount')
+                date = data.get('date')
+
+                # Проверяем, что все поля заполнены - если нет, возвращаем 400 Bad Request
+                if not name or not category or not amount or not date:
+                    # Отправляем JSON-ответ с сообщением об ошибке
+                    self._handle_error(400, "Недостаточно данных для добавления траты!")
+                    return
+
+                # Если все данные присутствуют, добавляем трату через tracker
+                msg = tracker.add_expense(name, category, amount, date)
+                logger.info(f"Expense added: {msg}")
+
+                self._send_json_response({"message": msg})
+
+            else:
+                # Если POST-запрос на неизвестный путь, возвращаем 404 Not Found
+                self._send_json_response({
+                    "error": "Not Found",
+                    "message": f"Метод '{path}' не найден"
+                }, 404)
+
+        except Exception as e:
+            logger.exception("Unexpected error in POST handler")
+            self._send_json_response({
+                "error": "Internal Server Error",
+                "message": str(e)
+            }, 500)
+    
     def do_GET(self): # noqa: N802
         """
         Обработка GET-запросов.
@@ -76,66 +128,66 @@ class SimpleHTTPRequestHandler(BaseHTTPRequestHandler):
          - /max_expense?month=<месяц с нулем или без>&category=... — возвращает максимальную трату в категории за месяц
          - /full_records — возвращает все записи о тратах
         """
-        parsed_url = urlparse(self.path)
-        path = parsed_url.path
-        params = parse_qs(parsed_url.query) # Разбираем параметры запроса в словарь: ключ -> список значений
-        if path == "/top_category":
-            # Получаем параметр month (если нет, пустая строка)
-            month = params.get("month", [""])[0]
-            # Получаем категорию с максимальной тратой в этом месяце
-            top = tracker.get_top_category(month)
-            if top:
+
+        try:
+
+            parsed_url = urlparse(self.path)
+            path = parsed_url.path
+            params = parse_qs(parsed_url.query) # Разбираем параметры запроса в словарь: ключ -> список значений
+            
+            # Записываем дебаг лог о плученном запросе
+            logger.debug(f"GET request: {path} with params {params}")
+
+            if path == "/top_category":
+                # Получаем параметр month (если нет, пустая строка)
+                month = params.get("month", [""])[0]
+                # Получаем категорию с максимальной тратой в этом месяце
+                top = tracker.get_top_category(month)
+
+                if not top:
+                    self._handle_error(404, f"В месяце '{month}' не найдено категорий")
+                    return
+                
                 self._set_headers()
-                self.wfile.write(json.dumps({
-                    f"Категория с максимальной тратой в месяце {month}": top
-                }).encode('utf-8'))
-            else:
-                # Если данных нет - 404 Not Found с сообщением
-                self._set_headers(404)
-                response = {
-                    "error": "Not Found",
-                    "message": f"В месяце '{month}' не найдено ни одной категории с тратами!"
-                }
+                response = {f"Категория с максимальной тратой в месяце {month}": top}
                 self.wfile.write(json.dumps(response).encode('utf-8'))
-        elif path == "/max_expense":
-            # Получаем параметры month и category
-            month = params.get("month", [""])[0]
-            category = params.get("category", [""])[0]
-            # Получаем максимальную трату по данным параметрам
-            exp = tracker.get_max_expense(month, category)
-            if exp:
+
+            elif path == "/max_expense":
+                # Получаем параметры month и category
+                month = params.get("month", [""])[0]
+                category = params.get("category", [""])[0]
+                # Получаем максимальную трату по данным параметрам
+                exp = tracker.get_max_expense(month, category)
+
+                if not exp:
+                    self._handle_error(404, f"В месяце '{month}' и категории '{category}' трат не найдено")
+                    return
+
                 self._set_headers()
                 response = {f"Максимальная трата в месяце '{month}' и категории '{category}'": exp['name']}
-            else:
-                self._set_headers(404)
-                response = {
-                    "error": "Not Found",
-                    "message": f"В месяце '{month}' и категории '{category}' трат не найдено!"
-                }
-            # Отправляем JSON-ответ с результатом или ошибкой
-            self.wfile.write(json.dumps(response).encode('utf-8'))
-        elif path == "/full_records":
-            # Получаем все записи о тратах
-            expenses = tracker.get_full_records()
-            if expenses:
+                self.wfile.write(json.dumps(response).encode('utf-8'))
+
+            elif path == "/full_records":
+                # Получаем все записи о тратах
+                expenses = tracker.get_full_records()
+
+                # Если записей нет, то Not Found 404 с сообщением
+                if not expenses:
+                    self._handle_error(404, "Записей о тратах не найдено")
+                    return
+                
                 self._set_headers()
                 # Используем bson.json_util.dumps — сериализация, поддерживающая BSON-объекты из MongoDB
                 self.wfile.write(dumps(expenses).encode('utf-8'))
+                
             else:
-                # Если записей нет, то Not Found 404 с сообщением
-                self._set_headers(404)
-                response = {
-                    "error": "Not Found",
-                    "message": "Записей о тратах не найдено!"
-                }
-                self.wfile.write(json.dumps(response).encode('utf-8'))
-        else:
-            # Для всех других путей возвращаем 404 Not Found с сообщением
-            self._set_headers(404)
-            self.wfile.write(json.dumps({
-                "error": "Not Found",
-                "message": f"На сервере не обнаружено запрашиваемого метода '{path}'."
-            }).encode('utf-8'))
+                # Для всех других путей возвращаем 404 Not Found с сообщением
+                self._handle_error(404, f"Метод '{path}' не найден")
+
+        except Exception as e:
+            logger.exception("Unexpected error in GET handler")
+            self._handle_error(500, "Внутренняя ошибка сервера")
+
 
 def run(server_class=HTTPServer, handler_class=SimpleHTTPRequestHandler, port=8080):
     """
@@ -145,7 +197,7 @@ def run(server_class=HTTPServer, handler_class=SimpleHTTPRequestHandler, port=80
     """
     server_address = ('', port) # '' - означает слушать на всех сетевых интерфейсах
     httpd = server_class(server_address, handler_class)
-    print(f'HTTP-сервер запущен на порту {port}')
+    logger.info(f"HTTP-сервер запущен на порту {port}")
     httpd.serve_forever() # Запускает бесконечный цикл обработки входящих запросов
 
 if __name__ == '__main__':
