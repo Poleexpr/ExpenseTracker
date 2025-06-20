@@ -1,3 +1,5 @@
+import re
+
 # logic
 # Класс, описывающий отдельную трату
 class Expense:
@@ -77,6 +79,9 @@ class ExpenseTracker:
             return "Ошибка: сумма должна быть числом."
 
         # Проверка формата даты
+        if not re.fullmatch(r'^\d{1,2}\.\d{1,2}$', date):
+            return "Ошибка: неверный формат даты. Ожидался <день.месяц>"
+    
         try:
             day, month = date.split(".")
             day = int(day)

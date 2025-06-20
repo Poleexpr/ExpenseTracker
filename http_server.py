@@ -100,11 +100,18 @@ class SimpleHTTPRequestHandler(BaseHTTPRequestHandler):
                     self._handle_error(400, "Недостаточно данных для добавления траты!")
                     return
 
-                # Если все данные присутствуют, добавляем трату через tracker
+                # Если все данные присутствуют, добавляем трату через tracker с проверкой на валидацию
                 msg = tracker.add_expense(name, category, amount, date)
                 logger.info(f"Expense added: {msg}")
 
-                self._send_json_response({"message": msg})
+                if msg.startswith("Ошибка:"):
+                    # Валидация не прошла — отдаем 400 Bad Request
+                    self._send_json_response({
+                        "error": "Bad Request",
+                        "message": msg
+                    }, 400)
+                else:
+                    self._send_json_response({"message": msg}, 200)
 
             else:
                 # Если POST-запрос на неизвестный путь, возвращаем 404 Not Found
@@ -201,5 +208,16 @@ def run(server_class=HTTPServer, handler_class=SimpleHTTPRequestHandler, port=80
     httpd.serve_forever() # Запускает бесконечный цикл обработки входящих запросов
 
 if __name__ == '__main__':
+    client_module = tracker.client.__class__.__module__
+    if not client_module.startswith('mongomock'):
+        try:
+            tracker.client.admin.command('ping')
+            logger.info("Соединение с MongoDB установлено успешно.")
+        except Exception as e:
+            logger.exception("Не удалось подключиться к MongoDB!")
+
+    else:
+        logger.info("Обнаружен mongomock — проверка подключения к MongoDB пропущена.")
+
     # Если скрипт запускается как основная программа, стартуем сервер
     run()
