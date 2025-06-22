@@ -13,7 +13,7 @@
 - MongoDB (pymongo)
 - HTTP сервер на базе `http.server`
 - `mongomock` для тестирования
-- `unittest` и `pytest` для тестов
+- `pytest` для тестов
 
 ## Установка и запуск
 
