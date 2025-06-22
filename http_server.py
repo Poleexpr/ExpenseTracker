@@ -64,13 +64,13 @@ class SimpleHTTPRequestHandler(BaseHTTPRequestHandler):
     def do_POST(self): # noqa: N802
         """
         Обработка POST-запросов.
-        В проекте поддерживается путь /add_expense, который позволяет добавить новую трату.
+        В проекте поддерживается путь /expenses, который позволяет добавить новую трату.
         """
         try:
             parsed_url = urlparse(self.path) # Выполняем парсинг пути
             path = parsed_url.path # Получаем путь запроса
             
-            if path == "/add_expense":
+            if path == "/expenses":
                 # Получаем длину тела запроса из заголовков
                 content_length = int(self.headers.get('Content-Length', 0))
                 # Читаем тело запроса (байты), декодируем из utf-8 в строку
@@ -131,9 +131,9 @@ class SimpleHTTPRequestHandler(BaseHTTPRequestHandler):
         """
         Обработка GET-запросов.
         Поддерживаются следующие пути:
-         - /top_category?month=<месяц с нулем или без> — возвращает категорию с максимальной тратой за месяц
-         - /max_expense?month=<месяц с нулем или без>&category=... — возвращает максимальную трату в категории за месяц
-         - /full_records — возвращает все записи о тратах
+         - /categories/top?month=<месяц с нулем или без> — возвращает категорию с максимальной тратой за месяц
+         - /expenses/largest?month=<месяц с нулем или без>&category=... — возвращает максимальную трату в категории за месяц
+         - /expenses/full_records — возвращает все записи о тратах. Добавлено для наглядности, не документированный функционал.
         """
 
         try:
@@ -145,7 +145,7 @@ class SimpleHTTPRequestHandler(BaseHTTPRequestHandler):
             # Записываем дебаг лог о плученном запросе
             logger.debug(f"GET request: {path} with params {params}")
 
-            if path == "/top_category":
+            if path == "/categories/top":
                 # Получаем параметр month (если нет, пустая строка)
                 month = params.get("month", [""])[0]
                 # Получаем категорию с максимальной тратой в этом месяце
@@ -159,7 +159,7 @@ class SimpleHTTPRequestHandler(BaseHTTPRequestHandler):
                 response = {f"Категория с максимальной тратой в месяце {month}": top}
                 self.wfile.write(json.dumps(response).encode('utf-8'))
 
-            elif path == "/max_expense":
+            elif path == "/expenses/largest":
                 # Получаем параметры month и category
                 month = params.get("month", [""])[0]
                 category = params.get("category", [""])[0]
@@ -174,7 +174,7 @@ class SimpleHTTPRequestHandler(BaseHTTPRequestHandler):
                 response = {f"Максимальная трата в месяце '{month}' и категории '{category}'": exp['name']}
                 self.wfile.write(json.dumps(response).encode('utf-8'))
 
-            elif path == "/full_records":
+            elif path == "/expenses/full_records":
                 # Получаем все записи о тратах
                 expenses = tracker.get_full_records()
 
