@@ -66,12 +66,12 @@ def start_test_server(mock_tracker, test_logger):
 
 def test_add_expense_api_success(start_test_server):
     """
-    Тест проверяет успешное добавление траты через POST /add_expense.
+    Тест проверяет успешное добавление траты через POST /expenses.
     Отправляем корректные данные и проверяем, что сервер ответил 200 OK и сообщает об успешном добавлении.
     """
     url, log_stream = start_test_server
     response = requests.post(
-        url + '/add_expense',
+        url + '/expenses',
         json={
             "name": "яблоко",
             "category": "фрукты",
@@ -88,12 +88,12 @@ def test_add_expense_api_success(start_test_server):
 
 def test_add_expense_api_missing_fields(start_test_server):
     """
-    Тест проверяет поведение сервера при отсутствии необходимых данных в POST /add_expense.
+    Тест проверяет поведение сервера при отсутствии необходимых данных в POST /expenses.
     Отправляем запрос с пустым именем, ожидаем ошибку 400 Bad Request с соответствующим сообщением.
     """
     url, log_stream = start_test_server
     response = requests.post(
-        f"{url}/add_expense",
+        f"{url}/expenses",
         json={"name": "", "category": "", "amount": 0, "date": ""},
         headers={'Content-Type': 'application/json'}
     )
@@ -110,11 +110,11 @@ def test_add_expense_api_missing_fields(start_test_server):
 
 def test_get_top_category_api(start_test_server):
     """
-    Тест проверяет GET запрос /top_category?month=06.
+    Тест проверяет GET запрос /categories/top?month=06.
     Проверяем, что сервер вернул код 200 при наличии данных или 404 если данных нет.
     """
     url, log_stream = start_test_server
-    response = requests.get(f"{url}/top_category?month=06")
+    response = requests.get(f"{url}/categories/top?month=06")
 
     if response.status_code == 404:
         assert 'application/json' in response.headers['Content-Type']
@@ -125,11 +125,11 @@ def test_get_top_category_api(start_test_server):
 
 def test_get_max_expense_api(start_test_server):
     """
-    Тест проверяет GET запрос /max_expense?month=06&category=фрукты.
+    Тест проверяет GET запрос /expenses/largest?month=06&category=фрукты.
     Проверяем, что сервер вернул корректный статус (200 при наличии данных, либо 404 если данных нет).
     """
     url, log_stream = start_test_server
-    response = requests.get(url + '/max_expense?month=06&category=фрукты')
+    response = requests.get(url + '/expenses/largest?month=06&category=фрукты')
     assert response.status_code in (200, 404)
     if response.status_code == 404:
         data = response.json()
@@ -138,11 +138,11 @@ def test_get_max_expense_api(start_test_server):
 
 def test_full_records_api(start_test_server):
     """
-    Тест проверяет GET /full_records - весь список расходов.
+    Тест проверяет GET /expenses/full_records - весь список расходов.
     Проверяем, что сервер возвращает либо 200 OK с данными, либо 404 если записей нет.
     """
     url, log_stream = start_test_server
-    response = requests.get(url + '/full_records')
+    response = requests.get(url + '/expenses/full_records')
     assert response.status_code in (200, 404)
     if response.status_code == 404:
         data = response.json()

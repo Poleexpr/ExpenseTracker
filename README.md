@@ -13,7 +13,7 @@
 - MongoDB (pymongo)
 - HTTP сервер на базе `http.server`
 - `mongomock` для тестирования
-- `unittest` и `pytest` для тестов
+- `pytest` для тестов
 
 ## Установка и запуск
 
@@ -29,7 +29,7 @@ python http_server.py
 
 API
 Добавление расхода
-POST /add_expense
+POST /expenses
 
 Тело запроса (JSON):
 ```json
@@ -42,7 +42,7 @@ POST /add_expense
 ```
 Получение категории с максимальными расходами за месяц
 ```
-GET /top_category?month=06
+GET /categories/top?month=06
 ```
 Ответ:
 ```json
