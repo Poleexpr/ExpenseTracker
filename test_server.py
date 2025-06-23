@@ -178,3 +178,92 @@ def test_post_to_unknown_path_returns_404(start_test_server):
     assert data.get("message") == "Метод '/unknown_path' не найден"
     logs = log_stream.getvalue()
     assert "unknown_path" in logs
+
+def test_post_invalid_json(start_test_server):
+    """ Проверка передачи невалидного json """
+    url, _ = start_test_server
+    response = requests.post(
+        url + '/expenses',
+        data="{invalid: json}",
+        headers={'Content-Type': 'application/json'}
+    )
+    assert response.status_code == 400
+    assert "Неверный формат JSON" in response.json()["message"]
+
+def test_post_invalid_amount_type(start_test_server):
+    """ Проверка невалидных значений amount """
+    url, _ = start_test_server
+    response = requests.post(url + '/expenses', json={
+        "name": "Шина",
+        "category": "Транспорт",
+        "amount": "много",  # некорректный тип
+        "date": "01.06"
+    })
+    assert response.status_code == 400
+    assert "Ошибка" in response.json()["message"]
+
+def test_get_exception_handling(start_test_server, monkeypatch):
+    """
+    Исключение внутри do_GET (например, поломать tracker).
+    Проверяем, что сервер не падает при ошибках и отдаёт 500 с понятным ответом.
+    """
+    def raise_exception(*args, **kwargs):
+        raise Exception("Test exception")
+
+    monkeypatch.setattr(http_server.tracker, 'get_top_category', raise_exception)
+    url, _ = start_test_server
+    response = requests.get(f"{url}/categories/top?month=06")
+    assert response.status_code == 500
+    assert response.json()["message"] == "Внутренняя ошибка сервера"
+
+def test_post_exception_handling(start_test_server, monkeypatch):
+    """
+    Исключение внутри do_POST.
+    Проверяем, что сервер не падает при ошибках и отдаёт 500 с понятным ответом.
+    """
+    def raise_exception(*args, **kwargs):
+        raise Exception("Test exception")
+
+    monkeypatch.setattr(http_server.tracker, 'add_expense', raise_exception)
+    url, _ = start_test_server
+    response = requests.post(
+        url + '/expenses',
+        json={
+            "name": "Чипсы",
+            "category": "Еда",
+            "amount": 50,
+            "date": "10.06"
+        }
+    )
+    assert response.status_code == 500
+    assert "Test exception" in response.json()["message"]
+
+def test_get_top_category_api_success(start_test_server, mock_tracker):
+    """ Успешный GET /categories/top """
+    mock_tracker.add_expense("сыр", "еда", 300, "10.06")
+    mock_tracker.add_expense("кола", "напитки", 100, "10.06")
+    url, _ = start_test_server
+    response = requests.get(f"{url}/categories/top?month=06")
+    assert response.status_code == 200
+    data = response.json()
+    assert "Еда" in list(data.values())[0]
+
+def test_get_max_expense_api_success(start_test_server, mock_tracker):
+    """ Успешный GET /expenses/largest """
+    mock_tracker.add_expense("сыр", "еда", 300, "10.06")
+    mock_tracker.add_expense("кола", "еда", 100, "10.06")
+    url, _ = start_test_server
+    response = requests.get(f"{url}/expenses/largest?month=06&category=еда")
+    assert response.status_code == 200
+    assert "Сыр" in list(response.json().values())[0]
+
+def test_full_records_api_success(start_test_server, mock_tracker):
+    """ Успешный GET /expenses/full_records """
+    mock_tracker.add_expense("пицца", "еда", 500, "10.06")
+    url, _ = start_test_server
+    response = requests.get(f"{url}/expenses/full_records")
+    assert response.status_code == 200
+    data = response.json()
+    assert isinstance(data, list)
+    assert any("Пицца" in str(entry.values()) for entry in data)
+
